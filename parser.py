@@ -63,6 +63,17 @@ class FunctionBody:
             if left is None:
                 raise ValueError(f"Left hand side doesn't found for {left}")
             identifiers.append(Identifier.from_node(left))
+        
+        # identifier from local variable declaration
+        for node in get_all_descendant_with_node_type(self.node, "variable_declarator"):
+            ident = node.child_by_field_name('name')
+            assert ident is not None
+            identifiers.append(Identifier.from_node(ident))
+        
+        # get identifier from function arguments
+        for node in get_all_descendant_with_node_type(self.node, 'argument'):
+            identifiers.append(Identifier.from_node(node))
+
         return identifiers
 
 
@@ -104,7 +115,6 @@ class Function:
     def find_all_ref(self):
         modified_identifiers = self.function_body.maybe_modified_identifiers
         modified_names = set(ident.name for ident in modified_identifiers)
-        print(modified_names)
         for param in self.parameter_identifiers:
             if param.name in modified_names:
                 print(param)
