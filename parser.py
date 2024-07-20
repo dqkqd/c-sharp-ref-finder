@@ -1,6 +1,6 @@
 import dataclasses
 import itertools
-from typing import Generator
+from typing import ClassVar, Generator
 
 import tree_sitter_c_sharp as cspython
 from tree_sitter import Language, Node, Parser
@@ -47,6 +47,26 @@ class Identifier:
 
 
 @dataclasses.dataclass
+class FunctionBody:
+    node: Node
+    MODIFIER_FIELD_TYPE: ClassVar[list[str]] = ["expression_statement"]
+
+    @property
+    def maybe_modified_identifiers(self) -> list[Identifier]:
+        maybe_modified_nodes = itertools.chain(
+            get_all_descendant_with_node_type(self.node, "assignment_expression"),
+            get_all_descendant_with_node_type(self.node, "declaration_expression"),
+        )
+        identifiers: list[Identifier] = []
+        for node in maybe_modified_nodes:
+            left = node.child_by_field_name('left')
+            if left is None:
+                raise ValueError(f"Left hand side doesn't found for {left}")
+            identifiers.append(Identifier.from_node(left))
+        return identifiers
+
+
+@dataclasses.dataclass
 class Function:
     node: Node
 
@@ -74,9 +94,25 @@ class Function:
         parameter_names = list(itertools.chain(*all_param_names))
         return parameter_names
 
+    @property
+    def function_body(self) -> FunctionBody:
+        body = self.node.child_by_field_name("body")
+        if body is None:
+            raise ValueError(f"Function body does not exist {self}")
+        return FunctionBody(node=body)
+
+    def find_all_ref(self):
+        modified_identifiers = self.function_body.maybe_modified_identifiers
+        modified_names = set(ident.name for ident in modified_identifiers)
+        print(modified_names)
+        for param in self.parameter_identifiers:
+            if param.name in modified_names:
+                print(param)
+        return None
+
     @classmethod
     def functions_from_node(cls, node: Node) -> list["Function"]:
-        function_nodes = get_all_descendant_with_node_type(node, 'method_declaration')
+        function_nodes = get_all_descendant_with_node_type(node, "method_declaration")
         functions = [Function(node=n) for n in function_nodes]
         return functions
 
@@ -86,7 +122,9 @@ def get_root_node_from_source(source: str) -> Node:
     return tree.root_node
 
 
-def get_all_descendant_with_node_type(node: Node, node_type: str) -> Generator[Node, None, None]:
+def get_all_descendant_with_node_type(
+    node: Node, node_type: str
+) -> Generator[Node, None, None]:
     if node.type == node_type:
         yield node
     for child in node.children:
@@ -96,3 +134,5 @@ def get_all_descendant_with_node_type(node: Node, node_type: str) -> Generator[N
 if __name__ == "__main__":
     node = get_root_node_from_source(source_code)
     functions = Function.functions_from_node(node)
+    for function in functions:
+        function.find_all_ref()
